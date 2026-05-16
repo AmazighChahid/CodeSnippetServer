@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code Snippet Server · Démo embed live</title>
+<style>
+  :root {
+    --ivory: #FAF9F5; --slate: #141413;
+    --clay: #D97757;
+    --gray-100: #F0EEE6; --gray-200: #E5E3D9;
+    --gray-500: #87867F; --gray-700: #3D3D3A;
+    --serif: ui-serif, Georgia, serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 48px 56px 120px; max-width: 1180px;
+    background: var(--ivory); color: var(--slate);
+    font-family: var(--sans); font-size: 14.5px; line-height: 1.55;
+  }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--clay); margin-bottom: 8px;
+  }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 36px; margin: 0 0 10px; }
+  p.lede { color: var(--gray-700); max-width: 720px; }
+
+  .snippet {
+    margin: 28px 0; border: 1px solid var(--gray-200); border-radius: 10px;
+    background: #FCFBF6; overflow: hidden;
+  }
+  .snippet-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 16px; border-bottom: 1px solid var(--gray-200);
+    background: var(--gray-100);
+    font-family: var(--mono); font-size: 12px; color: var(--gray-700);
+  }
+  .snippet-head .src { color: var(--gray-500); }
+  .snippet-head .lines { color: var(--gray-500); font-size: 11px; }
+
+  .snippet-body { padding: 14px 18px; overflow-x: auto; }
+  .snippet-body pre { margin: 0; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; }
+  .snippet-body pre.shiki { background: transparent !important; }
+
+  .snippet-status {
+    padding: 14px 18px; font-family: var(--mono); font-size: 12px;
+    color: var(--gray-500); font-style: italic;
+  }
+  .snippet[data-state="error"] .snippet-status { color: #991B1B; font-style: normal; }
+  .snippet[data-state="ready"] .snippet-status { display: none; }
+  .snippet:not([data-state="ready"]) .snippet-body { display: none; }
+
+  footer.note {
+    margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--gray-200);
+    font-size: 12px; color: var(--gray-500);
+  }
+  footer.note code {
+    font-family: var(--mono); background: var(--gray-100);
+    padding: 1px 6px; border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+
+<div class="eyebrow">Démo · embed live via AST</div>
+<h1>Snippets chargés à la volée</h1>
+<p class="lede">
+  Aucun code n'est codé en dur dans cette page. Chaque bloc ci-dessous est récupéré
+  depuis un serveur local qui parse le fichier source via <code>ts-morph</code> et
+  retourne la fonction par <em>nom de symbole</em>. Si le code bouge dans le fichier,
+  rien à changer ici.
+</p>
+
+<!-- Bloc 1 — code brut -->
+<section class="snippet"
+         data-repo="alldebrid-web"
+         data-file="src/lib/utils.ts"
+         data-symbol="parseMagnetTitle"
+         data-format="text"
+         data-state="loading">
+  <div class="snippet-head">
+    <span><span class="src">alldebrid-web</span> · src/lib/utils.ts → <strong>parseMagnetTitle</strong></span>
+    <span class="lines"></span>
+  </div>
+  <div class="snippet-status">Chargement…</div>
+  <div class="snippet-body"><pre><code></code></pre></div>
+</section>
+
+<!-- Bloc 2 — HTML highlighté côté serveur via Shiki -->
+<section class="snippet"
+         data-repo="alldebrid-web"
+         data-file="src/lib/utils.ts"
+         data-symbol="parseMagnetTitle"
+         data-format="html"
+         data-state="loading">
+  <div class="snippet-head">
+    <span><span class="src">alldebrid-web</span> · src/lib/utils.ts → <strong>parseMagnetTitle</strong> (highlight Shiki)</span>
+    <span class="lines"></span>
+  </div>
+  <div class="snippet-status">Chargement…</div>
+  <div class="snippet-body"></div>
+</section>
+
+<footer class="note">
+  Configurer l'endpoint via <code>window.__SNIPPET_API__</code> avant le script,
+  ou laisser la valeur par défaut <code>http://127.0.0.1:4477</code>.
+</footer>
+
+<script>
+(async () => {
+  const API = window.__SNIPPET_API__ || "http://127.0.0.1:4477";
+
+  // HTML inséré uniquement depuis le serveur local trusté (sortie Shiki, échappée).
+  function setSafeServerHtml(el, html) { el.innerHTML = html; }
+
+  function setError(node, msg) {
+    node.dataset.state = "error";
+    node.querySelector(".snippet-status").textContent = msg;
+  }
+
+  async function fetchMeta(repo, file, symbol) {
+    const p = new URLSearchParams({ repo, file, symbol, format: "json" });
+    const r = await fetch(`${API}/snippet?${p}`);
+    if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+    return r.json();
+  }
+
+  async function loadOne(node) {
+    const { repo, file, symbol } = node.dataset;
+    const format = node.dataset.format || "json";
+    const params = new URLSearchParams({ repo, file, symbol, format });
+
+    try {
+      const res = await fetch(`${API}/snippet?${params}`);
+      if (!res.ok) {
+        setError(node, `${res.status} — ${await res.text()}`);
+        return;
+      }
+
+      const linesEl = node.querySelector(".snippet-head .lines");
+      const body = node.querySelector(".snippet-body");
+
+      if (format === "html") {
+        setSafeServerHtml(body, await res.text());
+        try {
+          const meta = await fetchMeta(repo, file, symbol);
+          linesEl.textContent = `L${meta.startLine}–${meta.endLine}`;
+        } catch { /* non bloquant */ }
+      } else if (format === "text") {
+        body.querySelector("code").textContent = await res.text();
+        try {
+          const meta = await fetchMeta(repo, file, symbol);
+          linesEl.textContent = `L${meta.startLine}–${meta.endLine}`;
+        } catch { /* non bloquant */ }
+      } else {
+        const data = await res.json();
+        body.querySelector("code").textContent = data.code;
+        linesEl.textContent = `L${data.startLine}–${data.endLine}`;
+      }
+
+      node.dataset.state = "ready";
+    } catch (err) {
+      setError(node, String(err));
+    }
+  }
+
+  document.querySelectorAll(".snippet[data-symbol]").forEach(loadOne);
+})();
+</script>
+</body>
+</html>
