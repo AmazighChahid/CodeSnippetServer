@@ -7,7 +7,7 @@ Stack : Node + Fastify + [ts-morph](https://github.com/dsherret/ts-morph) + [Shi
 ## Installation
 
 ```bash
-cd ~/Projets/08-CodeSnippetServer
+cd ~/snippet-server
 npm install
 cp config.example.json config.json
 # édite config.json pour pointer vers tes repos
@@ -27,9 +27,9 @@ Le serveur écoute par défaut sur `http://127.0.0.1:4477`.
   "corsOrigins": ["*"],
   "highlightTheme": "github-light",
   "repos": {
-    "alldebrid-web": {
-      "root": "/Users/jo/Projets/07-AllDebridWeb",
-      "description": "Repo web AllDebrid"
+    "my-app": {
+      "root": "/absolute/path/to/your/repo",
+      "description": "Mon app web"
     }
   }
 }
@@ -53,14 +53,14 @@ Extrait un symbole. Params :
 Exemple :
 
 ```bash
-curl "http://127.0.0.1:4477/snippet?repo=alldebrid-web&file=src/lib/utils.ts&symbol=parseMagnetTitle"
+curl "http://127.0.0.1:4477/snippet?repo=my-app&file=src/lib/utils.ts&symbol=parseMagnetTitle"
 ```
 
 Réponse `json` :
 
 ```json
 {
-  "repo": "alldebrid-web",
+  "repo": "my-app",
   "file": "src/lib/utils.ts",
   "symbol": "parseMagnetTitle",
   "kind": "FunctionDeclaration",
@@ -75,8 +75,41 @@ Réponse `json` :
 Liste tous les symboles top-level d'un fichier.
 
 ```bash
-curl "http://127.0.0.1:4477/list?repo=alldebrid-web&file=src/lib/utils.ts"
+curl "http://127.0.0.1:4477/list?repo=my-app&file=src/lib/utils.ts"
 ```
+
+### `GET /symbol-at-line`
+
+Retourne le symbole nommé le plus profond dont le corps englobe une ligne donnée. Utile pour réparer des manifests qui ont stocké un nom de symbol parent (`ProfilesPage`) alors qu'ils décrivent un helper interne (`handleDelete`).
+
+| Param | Requis | Description |
+|---|---|---|
+| `repo` | oui | Clé d'un repo déclaré en config |
+| `file` | oui | Chemin relatif au repo |
+| `line` | oui | Numéro de ligne 1-indexé |
+
+Réponse :
+
+```json
+{
+  "repo": "my-app",
+  "file": "src/app/profiles/page.tsx",
+  "line": 74,
+  "symbol": {
+    "name": "handleDelete",
+    "kind": "FunctionDeclaration",
+    "startLine": 74,
+    "endLine": 88
+  }
+}
+```
+
+Codes d'erreur :
+
+- `400` si un param est manquant ou si `line` n'est pas un entier valide.
+- `404` si aucun symbole nommé n'englobe cette ligne.
+
+Note technique : l'algorithme descend l'AST ts-morph et garde le symbole nommé le plus profond contenant la ligne. Probe à fin de ligne pour que la déclaration elle-même résolve à son propre symbole.
 
 ### `GET /health`
 
