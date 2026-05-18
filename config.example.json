@@ -4,13 +4,9 @@
   "corsOrigins": ["*"],
   "highlightTheme": "github-light",
   "repos": {
-    "alldebrid-web": {
-      "root": "/Users/jo/Projets/07-AllDebridWeb",
-      "description": "Repo web AllDebrid (Next.js)"
-    },
-    "alldebrid-tv": {
-      "root": "/Users/jo/Projets/06-AllDebridTV",
-      "description": "Repo React Native tvOS"
+    "my-app": {
+      "root": "/absolute/path/to/your/repo",
+      "description": "Description courte du repo"
     }
   }
 }

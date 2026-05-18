@@ -4,6 +4,7 @@ import { loadConfig } from "./config.js";
 import { PathError, resolveSourcePath } from "./path-resolver.js";
 import {
   extractSymbol,
+  findEnclosingSymbol,
   listSymbols,
   SymbolNotFoundError,
   type ExtractedSymbol,
@@ -188,6 +189,38 @@ fastify.get<{ Querystring: ListQuery }>("/list", async (req, reply) => {
       listCache.set(absolute, symbols);
     }
     return { repo, file, symbols };
+  } catch (err) {
+    return handleError(reply, err);
+  }
+});
+
+interface SymbolAtLineQuery {
+  repo: string;
+  file: string;
+  line: string;
+}
+
+// Return the deepest named symbol whose body contains the given line. Used by
+// the VCExperience reports to repair manifests where `symbol` was stored as
+// the top-level export when the entry actually documents an inner helper.
+fastify.get<{ Querystring: SymbolAtLineQuery }>("/symbol-at-line", async (req, reply) => {
+  const { repo, file, line } = req.query;
+  if (!repo || !file || !line) {
+    return reply.code(400).send({ error: "repo, file and line are required" });
+  }
+  const lineNum = Number(line);
+  if (!Number.isFinite(lineNum) || lineNum < 1) {
+    return reply.code(400).send({ error: "line must be a positive integer" });
+  }
+  try {
+    const absolute = resolveSourcePath(config, repo, file);
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync(absolute, "utf8");
+    const sym = findEnclosingSymbol(absolute, source, lineNum);
+    if (!sym) {
+      return reply.code(404).send({ error: `no symbol found enclosing line ${lineNum}` });
+    }
+    return { repo, file, line: lineNum, symbol: sym };
   } catch (err) {
     return handleError(reply, err);
   }

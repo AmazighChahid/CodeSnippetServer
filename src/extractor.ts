@@ -140,3 +140,81 @@ export function listSymbols(absolutePath: string, source: string): SymbolListEnt
 }
 
 export class SymbolNotFoundError extends Error {}
+
+export interface EnclosingSymbol {
+  name: string;
+  kind: string;
+  startLine: number;
+  endLine: number;
+}
+
+// Walk the AST and find the deepest named function/class/method/variable
+// whose source range contains the given line. Used to repair report manifests
+// that stored only the top-level export symbol when the entry actually
+// describes an inner helper (e.g. `handleDelete` inside `ProfilesPage`).
+export function findEnclosingSymbol(
+  absolutePath: string,
+  source: string,
+  line: number,
+): EnclosingSymbol | null {
+  const sf = makeSourceFile(absolutePath, source);
+  // Probe at end-of-line so a target line that is the declaration line itself
+  // (e.g. `async function handleDelete(...) {` at line 74) still resolves to
+  // that function rather than to its parent.
+  const safeLine = Math.max(1, line);
+  const lineStarts = sf.compilerNode.getLineStarts();
+  const lineStart = lineStarts[safeLine - 1] ?? 0;
+  const nextLineStart = lineStarts[safeLine] ?? source.length;
+  // Position just before the trailing newline of the target line.
+  const targetPos = Math.max(lineStart, nextLineStart - 1);
+
+  let best: { node: Node; depth: number; startLine: number } | null = null;
+
+  function isNamedSymbolKind(kind: SyntaxKind): boolean {
+    return (
+      kind === SyntaxKind.FunctionDeclaration ||
+      kind === SyntaxKind.MethodDeclaration ||
+      kind === SyntaxKind.ClassDeclaration ||
+      kind === SyntaxKind.InterfaceDeclaration ||
+      kind === SyntaxKind.TypeAliasDeclaration ||
+      kind === SyntaxKind.EnumDeclaration ||
+      kind === SyntaxKind.VariableDeclaration
+    );
+  }
+
+  function walk(node: Node, depth: number): void {
+    const start = node.getStart(false); // ignore leading trivia for containment
+    const end = node.getEnd();
+    if (targetPos < start || targetPos > end) return;
+
+    if (isNamedSymbolKind(node.getKind())) {
+      const name = nodeName(node);
+      if (name) {
+        const sLine = sf.getLineAndColumnAtPos(start).line;
+        // Prefer the deepest containing node, breaking ties on the highest startLine.
+        if (
+          !best ||
+          depth > best.depth ||
+          (depth === best.depth && sLine > best.startLine)
+        ) {
+          best = { node, depth, startLine: sLine };
+        }
+      }
+    }
+
+    node.forEachChild((child) => walk(child, depth + 1));
+  }
+
+  sf.forEachChild((child) => walk(child, 0));
+
+  if (!best) return null;
+  const node = (best as { node: Node }).node;
+  const startLine = sf.getLineAndColumnAtPos(node.getStart(false)).line;
+  const endLine = sf.getLineAndColumnAtPos(node.getEnd()).line;
+  return {
+    name: nodeName(node) || "",
+    kind: nodeKindLabel(node),
+    startLine,
+    endLine,
+  };
+}
