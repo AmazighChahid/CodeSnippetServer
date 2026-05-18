@@ -32,6 +32,7 @@ interface SnippetQuery {
   file: string;
   symbol: string;
   format?: "json" | "html" | "text";
+  anchors?: string; // comma-separated anchor names to narrow to (subset of the symbol's anchors)
 }
 
 interface ListQuery {
@@ -87,7 +88,7 @@ fastify.get<{ Querystring: FileQuery }>("/file", async (req, reply) => {
 });
 
 fastify.get<{ Querystring: SnippetQuery }>("/snippet", async (req, reply) => {
-  const { repo, file, symbol, format = "json" } = req.query;
+  const { repo, file, symbol, format = "json", anchors: anchorsParam } = req.query;
   if (!repo || !file || !symbol) {
     return reply.code(400).send({ error: "repo, file and symbol are required" });
   }
@@ -107,10 +108,18 @@ fastify.get<{ Querystring: SnippetQuery }>("/snippet", async (req, reply) => {
 
     // When anchors are present, narrow the displayed code to the smallest
     // window covering all anchors. If the symbol has no anchors, the full
-    // function body is returned.
+    // function body is returned. If `anchorsParam` is provided, restrict to
+    // that subset so a card spanning only part of a function doesn't pull in
+    // unrelated anchors from the same symbol (e.g. check-existing vs upsert).
     const rawAnchors = extractAnchors(absolute, source, symbol);
+    const anchorFilter = anchorsParam
+      ? new Set(anchorsParam.split(",").map((s) => s.trim()).filter(Boolean))
+      : null;
+    const filteredAnchors = anchorFilter
+      ? rawAnchors.filter((a) => anchorFilter.has(a.name))
+      : rawAnchors;
     const { code: viewCode, anchors: viewAnchors, narrowed } =
-      narrowToAnchors(extracted.code, rawAnchors);
+      narrowToAnchors(extracted.code, filteredAnchors);
 
     if (format === "text") {
       reply.type("text/plain; charset=utf-8");
